@@ -26,7 +26,8 @@ module.exports = async (req, res) => {
     const body = await readJson(req);
 
     // 🔧 REPLACE this with your real Google Apps Script URL
-    const SHEET_WEBAPP_URL = "https://script.google.com/macros/s/YOUR-URL-HERE/exec";
+    const SHEET_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbx40gwb39muKIf9F_kFErk2vkark9jKbhYRmmsJdLt95wakx4Wtd3CuBwXbJfz5epbIEQ/exec
+";
 
     const g = await fetch(SHEET_WEBAPP_URL, {
       method: "POST",
