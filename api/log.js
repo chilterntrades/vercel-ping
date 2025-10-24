@@ -1,4 +1,4 @@
-// api/log.js — forwards chat data to Google Sheets
+// api/log.js — forwards chat data to your Google Sheet (via Apps Script)
 
 async function readJson(req) {
   try {
@@ -6,9 +6,7 @@ async function readJson(req) {
     for await (const chunk of req) chunks.push(chunk);
     const raw = Buffer.concat(chunks).toString("utf8");
     return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+  } catch { return {}; }
 }
 
 module.exports = async (req, res) => {
@@ -25,19 +23,18 @@ module.exports = async (req, res) => {
 
     const body = await readJson(req);
 
-    // 🔧 REPLACE this with your real Google Apps Script URL
-    const SHEET_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbx40gwb39muKIf9F_kFErk2vkark9jKbhYRmmsJdLt95wakx4Wtd3CuBwXbJfz5epbIEQ/exec
-";
+    // 🔗 Your Google Apps Script Web App URL
+    const SHEET_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbx40gwb39muKIf9F_kFErk2vkark9jKbhYRmmsJdLt95wakx4Wtd3CuBwXbJfz5epbIEQ/exec";
 
     const g = await fetch(SHEET_WEBAPP_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     });
 
-    const result = await g.text();
-    res.status(200).json({ ok: true, sheetResponse: result });
+    const text = await g.text();
+    return res.status(200).json({ ok: true, sheetResponse: text });
   } catch (e) {
-    res.status(500).json({ error: "Server error", detail: String(e) });
+    return res.status(500).json({ error: "Server error", detail: String(e) });
   }
 };
