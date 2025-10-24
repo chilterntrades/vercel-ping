@@ -1,39 +1,45 @@
-// api/ai.js — Vercel Node Serverless with CORS + body parsing + GET ?prompt=...
+// api/ai.js — chat-style API (supports messages[] or prompt), CORS, body parsing, GET test
+
 async function readJson(req) {
   try {
     const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
+    for await (const c of req) chunks.push(c);
     const raw = Buffer.concat(chunks).toString("utf8");
     return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+  } catch { return {}; }
 }
 
 module.exports = async (req, res) => {
-  // --- CORS ---
-  const origin = req.headers.origin || "*"; // you can hardcode your domain later
+  // CORS
+  const origin = req.headers.origin || "*";
   res.setHeader("Access-Control-Allow-Origin", origin);
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
-  }
-  // ------------
+  if (req.method === "OPTIONS") return res.status(204).end();
 
   try {
-    // Support GET ?prompt=... for quick tests
     const url = new URL(req.url, `https://${req.headers.host}`);
     let prompt = url.searchParams.get("prompt") || "";
+    let messages = [];
 
-    // Parse JSON on POST
     if (req.method === "POST") {
       const body = await readJson(req);
-      prompt = (body?.prompt || "").trim() || prompt;
+      if (Array.isArray(body?.messages)) messages = body.messages;
+      else prompt = (body?.prompt || "").trim() || prompt;
     }
 
-    if (!prompt) return res.status(400).json({ error: "No prompt" });
+    if (!messages.length && !prompt) {
+      return res.status(400).json({ error: "No prompt or messages" });
+    }
+
+    // Build messages: prefer messages[], else wrap prompt
+    const chatMessages = messages.length
+      ? messages
+      : [
+          { role: "system", content: "You triage local trades enquiries. Ask 3–5 focused questions max. Keep replies ≤120 words. Capture name, contact, postcode, budget, dates when relevant." },
+          { role: "user", content: prompt },
+        ];
 
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -43,10 +49,7 @@ module.exports = async (req, res) => {
       },
       body: JSON.stringify({
         model: "gpt-5-mini",
-        messages: [
-          { role: "system", content: "You triage local trades enquiries. Ask 3–5 focused questions max. Keep replies ≤120 words. Capture name, contact, postcode, budget, dates when relevant." },
-          { role: "user", content: prompt },
-        ],
+        messages: chatMessages,
       }),
     });
 
@@ -62,4 +65,5 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: "Server error", detail: String(e) });
   }
 };
+
 
