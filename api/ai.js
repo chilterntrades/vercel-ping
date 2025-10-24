@@ -1,5 +1,4 @@
-// api/ai.js — Vercel Node Serverless (no framework)
-
+// api/ai.js — Vercel Node Serverless with CORS + body parsing + GET ?prompt=...
 async function readJson(req) {
   try {
     const chunks = [];
@@ -12,22 +11,30 @@ async function readJson(req) {
 }
 
 module.exports = async (req, res) => {
+  // --- CORS ---
+  const origin = req.headers.origin || "*"; // you can hardcode your domain later
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+  // ------------
+
   try {
-    // Allow quick GET testing: /api/ai?prompt=Hello
+    // Support GET ?prompt=... for quick tests
     const url = new URL(req.url, `https://${req.headers.host}`);
     let prompt = url.searchParams.get("prompt") || "";
 
-    // Parse JSON body on POST
+    // Parse JSON on POST
     if (req.method === "POST") {
       const body = await readJson(req);
       prompt = (body?.prompt || "").trim() || prompt;
     }
 
-    if (!prompt) {
-      return res.status(400).json({ error: "No prompt" });
-    }
+    if (!prompt) return res.status(400).json({ error: "No prompt" });
 
-    // Call OpenAI
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -37,7 +44,7 @@ module.exports = async (req, res) => {
       body: JSON.stringify({
         model: "gpt-5-mini",
         messages: [
-          { role: "system", content: "You triage local trades enquiries. Be concise and helpful." },
+          { role: "system", content: "You triage local trades enquiries. Ask 3–5 focused questions max. Keep replies ≤120 words. Capture name, contact, postcode, budget, dates when relevant." },
           { role: "user", content: prompt },
         ],
       }),
@@ -55,3 +62,4 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: "Server error", detail: String(e) });
   }
 };
+
