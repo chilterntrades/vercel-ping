@@ -6,13 +6,10 @@ const chunks = [];
 for await (const chunk of req) chunks.push(chunk);
 const raw = Buffer.concat(chunks).toString("utf8");
 return raw ? JSON.parse(raw) : {};
-} catch {
-return {};
-}
+} catch { return {}; }
 }
 
 module.exports = async (req, res) => {
-// CORS (allow your Shopify origin)
 const origin = req.headers.origin || "*";
 res.setHeader("Access-Control-Allow-Origin", origin);
 res.setHeader("Vary", "Origin");
@@ -22,14 +19,11 @@ if (req.method === "OPTIONS") return res.status(204).end();
 if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
 const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL;
-if (!APPS_SCRIPT_URL) {
-return res.status(500).json({ error: "Missing APPS_SCRIPT_URL env var" });
-}
+if (!APPS_SCRIPT_URL) return res.status(500).json({ error: "Missing APPS_SCRIPT_URL env var" });
 
 try {
 const body = await readJson(req);
 
-// Forward as-is to Apps Script
 const g = await fetch(APPS_SCRIPT_URL, {
 method: "POST",
 headers: { "Content-Type": "application/json" },
@@ -37,12 +31,8 @@ body: JSON.stringify(body),
 });
 
 const text = await g.text();
-if (!g.ok) {
-return res.status(502).json({ error: "Apps Script error", detail: text });
-}
-
 res.setHeader("Content-Type", "application/json");
-return res.status(200).send(text);
+return res.status(g.ok ? 200 : 502).send(text);
 } catch (e) {
 return res.status(500).json({ error: "Server error", detail: String(e) });
 }
