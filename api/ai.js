@@ -1,4 +1,4 @@
-// api/ai.js — chat-style API (supports messages[] or prompt), CORS, body parsing, GET test
+// api/ai.js — chat-style API with `mode=discover` for up-to-4 follow-up questions
 
 async function readJson(req) {
   try {
@@ -6,7 +6,9 @@ async function readJson(req) {
     for await (const c of req) chunks.push(c);
     const raw = Buffer.concat(chunks).toString("utf8");
     return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
+  } catch {
+    return {};
+  }
 }
 
 module.exports = async (req, res) => {
@@ -24,29 +26,34 @@ module.exports = async (req, res) => {
     // Inputs we support
     let prompt = url.searchParams.get("prompt") || "";
     let messages = [];
-    let model = "gpt-5-mini"; // default
-    let prompt_id = null;     // optional, not strictly required
+    let mode = url.searchParams.get("mode") || ""; // "", "discover"
+    let model = "gpt-4o-mini"; // default fast, good reasoning
+    let prompt_id = null;      // optional (kept for future SDK use)
 
     if (req.method === "POST") {
       const body = await readJson(req);
+
+      // Prefer messages[] if provided
       if (Array.isArray(body?.messages)) messages = body.messages;
       else prompt = (body?.prompt || "").trim() || prompt;
 
+      if (typeof body?.mode === "string") mode = body.mode.trim();
       if (typeof body?.model === "string" && body.model.trim()) model = body.model.trim();
       if (typeof body?.prompt_id === "string" && body.prompt_id.trim()) prompt_id = body.prompt_id.trim();
     }
 
+    // Guard
     if (!messages.length && !prompt) {
       return res.status(400).json({ error: "No prompt or messages" });
     }
 
-    // Strong system brief (inline so it works immediately)
+    // System briefs
     const SYSTEM_BRIEF = `
 You are **Chiltern Trades Assistant** — an intake assistant for UK plumbing & electrical jobs.
 Tone: warm, efficient, reassuring. Keep replies short (≤120 words).
 
 Do:
-- Quickly understand the issue (what/where/severity); ask focused follow-ups (max ~4 at a time).
+- Quickly understand the issue (what/where/severity) and ask focused follow-ups.
 - Encourage photos if useful.
 - Collect: first name, postcode area (e.g., HP5), phone number, preferred call time (today pm / tomorrow am / this week), optional budget, and consent to share details with a verified local professional.
 - Provide a concise recap before final confirmation.
@@ -61,19 +68,40 @@ Safety:
 Never:
 - Promise prices or availability. Ballparks only if explicitly asked (and mark as estimate).
 - Ask for full street address — postcode area is enough for intake.
-`;
+`.trim();
 
-    // Build messages:
-    // - If messages[] is supplied, we ALWAYS prepend our system brief
-    // - Else we wrap the single prompt with system + user
-    const chatMessages = messages.length
-      ? [{ role: "system", content: SYSTEM_BRIEF }, ...messages]
-      : [
-          { role: "system", content: SYSTEM_BRIEF },
-          { role: "user", content: prompt },
-        ];
+    const DISCOVER_BRIEF = `
+You are a friendly UK trade-intake assistant. The user describes a plumbing or electrical issue.
+Return **up to 4 short follow-up questions** (max **15 words** each) that best clarify the problem before collecting contact details.
+**Format strictly as a numbered list**:
+1) ...
+2) ...
+3) ...
+4) ...
+No advice, no answers, no extra lines, no summaries — questions only.
+`.trim();
 
-    // Call OpenAI Chat Completions API
+    // Build messages for OpenAI
+    let chatMessages;
+
+    if (mode === "discover") {
+      // First turn: generate up to 4 short follow-up questions, numbered
+      chatMessages = [
+        { role: "system", content: DISCOVER_BRIEF },
+        { role: "user", content: prompt || (messages[0]?.content || "") },
+      ];
+    } else if (messages.length) {
+      // Normal chat mode: prepend our system brief and forward the rest
+      chatMessages = [{ role: "system", content: SYSTEM_BRIEF }, ...messages];
+    } else {
+      // Single-prompt chat mode
+      chatMessages = [
+        { role: "system", content: SYSTEM_BRIEF },
+        { role: "user", content: prompt },
+      ];
+    }
+
+    // Call OpenAI (Chat Completions)
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -82,11 +110,10 @@ Never:
       },
       body: JSON.stringify({
         model,
+        temperature: mode === "discover" ? 0.3 : 0.5, // keep questions crisp
         messages: chatMessages,
-        // Optional: you provided a Prompt ID:
-        // "pmpt_68fa4bc64dd88193b379fa1801182e9b0f7c4f8f73a8009e"
-        // Some SDKs support preset prompts; the REST endpoint does not take a "prompt" object here.
-        // We still accept prompt_id in the request so you can use it later if you switch SDKs.
+        // Note: REST doesn't accept a prompt preset id; we keep prompt_id only for compatibility.
+        // prompt_id: prompt_id, // (ignored by REST API)
       }),
     });
 
