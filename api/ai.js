@@ -83,10 +83,11 @@ Use this scaffold where it makes sense:
 - Ask what is affected (tap, toilet, pipe, light, socket, fuse board, boiler, appliance).
 - Ask about severity or symptoms (drip vs constant leak, single light vs whole room, smells, noises).
 - Ask about access or anything that might make the job easier or harder.
-- Gently encourage photos at the end.
+- If the issue is clearly electrical, include a safety-focused question (burning smell, buzzing, heat, tripped switches).
+- If the issue is clearly plumbing, focus on where the water comes from, how bad it is, and access.
 
-If the issue is clearly electrical, include a safety-focused question (burning smell, buzzing, heat, tripped switches).
-If the issue is clearly plumbing, focus on where the water comes from, how bad it is, and access.
+Important:
+- Do NOT ask the user to send photos or images — that is handled separately in the flow.
 
 Important formatting rules:
 - Return only a numbered list of questions on separate lines.
@@ -133,8 +134,6 @@ Important formatting rules:
         model,
         temperature: mode === "discover" ? 0.3 : 0.5, // keep questions crisp
         messages: chatMessages,
-        // Note: REST doesn't accept a prompt preset id; we keep prompt_id only for compatibility.
-        // prompt_id: prompt_id, // (ignored by REST API)
       }),
     });
 
